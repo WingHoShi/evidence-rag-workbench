@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     max_file_bytes: int = 20 * 1024 * 1024
     max_knowledge_base_bytes: int = 100 * 1024 * 1024
+    embedding_model: str = "AI-ModelScope/multilingual-e5-small"
+    embedding_model_dir: Path = Path("models/multilingual-e5-small")
+    embedding_batch_size: int = 16
     qdrant_mode: Literal["local", "server"] = "local"
     qdrant_path: Path = Path("data/qdrant")
     qdrant_url: str | None = None

@@ -4,9 +4,11 @@
 
 ## 当前状态
 
-已完成可测试的前后端开发骨架与文档生命周期：FastAPI 提供 `GET /api/health`、知识库管理和文档上传 API；React/Vite 目前仍是中文工作台占位页面。检索、生成问答与可视化界面尚未实现。
+已完成可测试的前后端开发骨架、文档生命周期和向量索引：FastAPI 提供 `GET /api/health`、知识库管理、文档上传与手动索引 API；React/Vite 目前仍是中文工作台占位页面。生成问答与可视化界面尚未实现。
 
-上传文件会复制到项目 `data/uploads/`，原始文件不会被修改。当前阶段只校验文件后缀、大小、知识库容量和重复 Hash，并创建 `queued` 解析任务；DOCX/PDF 是否包含可提取文本、内容切分和向量索引将在 Task 4 完成。
+上传文件会复制到项目 `data/uploads/`，原始文件不会被修改。上传阶段只校验文件后缀、大小、知识库容量和重复 Hash，并创建 `queued` 解析任务；随后由索引入口校验 DOCX/PDF 是否包含可提取文本、完成内容切分与向量写入。
+
+索引入口会解析 Markdown、TXT、DOCX 和可复制文本 PDF，按标题、段落或 PDF 页码保留定位信息，再以本地 `multilingual-e5-small` 生成 384 维向量写入 Qdrant。模型默认使用 CPU、批量大小为 16；首次索引需要从 ModelScope 下载模型到已忽略的 `models/`，此过程不需要生成模型 API Key。扫描件或没有可复制文本的 PDF 会明确标记任务失败，不会伪装成已索引。
 
 ## 当前 API
 
@@ -14,8 +16,13 @@
 - `POST` / `GET` / `DELETE` `/api/knowledge-bases/{knowledge_base_id}/documents`
 - `POST` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/retry`
 - `GET` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/tasks`
+- `POST` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/index`
+- `POST` `/api/knowledge-bases/{knowledge_base_id}/rebuild-index`
+- `GET` `/api/knowledge-bases/{knowledge_base_id}/index-status`
 
-删除文档或知识库只会删除项目数据目录下的副本，并请求清理同一知识库范围内的向量；真实向量索引将在 Task 4 接入。
+删除文档或知识库只会删除项目数据目录下的副本，并同步清理同一知识库范围内的 Qdrant 向量。
+
+每个 Qdrant 检索请求都会强制带上 `knowledge_base_id` 过滤条件，避免跨知识库返回资料。索引状态会记录 Embedding 模型名和向量维度；如果更换模型，系统会拒绝混合写入，必须通过“重建索引”入口重新生成该知识库的所有向量。
 
 ## 本地运行（开发期）
 

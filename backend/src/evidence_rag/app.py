@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
+from evidence_rag.indexing import DocumentIndexingService, MultilingualE5EmbeddingEngine, QdrantChunkIndex
 from evidence_rag.lifecycle import DocumentLifecycleService, LifecycleError
 from evidence_rag.settings import Settings
 from evidence_rag.vector_store import VectorIndex
@@ -17,12 +18,19 @@ def lifecycle_error(error: LifecycleError) -> HTTPException:
 def create_app(
     settings: Settings | None = None,
     vector_index: VectorIndex | None = None,
+    embedding_engine=None,
 ) -> FastAPI:
     """创建 API 应用；后续路由以此工厂函数挂载，方便隔离测试配置。"""
     active_settings = settings or Settings()
     app = FastAPI(title="Evidence RAG Workbench API", version="0.1.0")
     app.state.settings = active_settings
-    app.state.services = DocumentLifecycleService(active_settings, vector_index)
+    active_index = vector_index or QdrantChunkIndex(active_settings)
+    app.state.services = DocumentLifecycleService(active_settings, active_index)
+    app.state.indexing_service = DocumentIndexingService(
+        app.state.services,
+        active_index,
+        embedding_engine or MultilingualE5EmbeddingEngine(active_settings),
+    )
 
     @app.get("/api/health")
     def health_check() -> dict[str, str]:
@@ -86,6 +94,27 @@ def create_app(
     def list_document_tasks(knowledge_base_id: str, document_id: str) -> list[dict]:
         try:
             return app.state.services.list_tasks(knowledge_base_id, document_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+
+    @app.post("/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/index")
+    def index_document(knowledge_base_id: str, document_id: str) -> dict:
+        try:
+            return app.state.indexing_service.index_document(knowledge_base_id, document_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+
+    @app.post("/api/knowledge-bases/{knowledge_base_id}/rebuild-index")
+    def rebuild_index(knowledge_base_id: str) -> dict:
+        try:
+            return app.state.indexing_service.rebuild_knowledge_base(knowledge_base_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+
+    @app.get("/api/knowledge-bases/{knowledge_base_id}/index-status")
+    def index_status(knowledge_base_id: str) -> dict:
+        try:
+            return app.state.indexing_service.index_status(knowledge_base_id)
         except LifecycleError as error:
             raise lifecycle_error(error) from error
 

@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS citation_snapshots (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS index_states (
+    knowledge_base_id TEXT PRIMARY KEY REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    embedding_model TEXT NOT NULL,
+    vector_dimension INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    last_indexed_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_documents_knowledge_base ON documents(knowledge_base_id);
 CREATE INDEX IF NOT EXISTS idx_versions_document ON document_versions(document_id, version_number);
 CREATE INDEX IF NOT EXISTS idx_tasks_version ON document_tasks(document_version_id, created_at);
@@ -380,6 +389,152 @@ class Database:
                 "DELETE FROM knowledge_bases WHERE id = ?", (knowledge_base_id,)
             )
         return result.rowcount == 1
+
+    def start_indexing(self, knowledge_base_id: str, document_id: str) -> dict | None:
+        document = self.get_document(knowledge_base_id, document_id)
+        if document is None:
+            return None
+        if document["status"] != "queued":
+            return {"status": "not_queued"}
+        updated_at = now()
+        with self.connection() as connection:
+            connection.execute(
+                """
+                UPDATE document_versions SET status = 'running', updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at, document["version_id"]),
+            )
+            connection.execute(
+                """
+                UPDATE document_tasks SET status = 'running', updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at, document["task"]["id"]),
+            )
+        return self.get_document(knowledge_base_id, document_id)
+
+    def complete_indexing(self, knowledge_base_id: str, document_id: str) -> dict | None:
+        document = self.get_document(knowledge_base_id, document_id)
+        if document is None:
+            return None
+        updated_at = now()
+        with self.connection() as connection:
+            connection.execute(
+                """
+                UPDATE document_versions
+                SET status = 'completed', error_message = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at, document["version_id"]),
+            )
+            connection.execute(
+                """
+                UPDATE document_tasks
+                SET status = 'completed', error_message = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (updated_at, document["task"]["id"]),
+            )
+        return self.get_document(knowledge_base_id, document_id)
+
+    def fail_indexing(self, knowledge_base_id: str, document_id: str, error_message: str) -> None:
+        document = self.get_document(knowledge_base_id, document_id)
+        if document is None:
+            return
+        updated_at = now()
+        with self.connection() as connection:
+            connection.execute(
+                """
+                UPDATE document_versions
+                SET status = 'failed', error_message = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (error_message, updated_at, document["version_id"]),
+            )
+            connection.execute(
+                """
+                UPDATE document_tasks
+                SET status = 'failed', error_message = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (error_message, updated_at, document["task"]["id"]),
+            )
+
+    def get_index_state(self, knowledge_base_id: str) -> dict | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM index_states WHERE knowledge_base_id = ?",
+                (knowledge_base_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def upsert_index_state(
+        self,
+        knowledge_base_id: str,
+        embedding_model: str,
+        vector_dimension: int,
+        status: str,
+        *,
+        indexed: bool = False,
+    ) -> None:
+        updated_at = now()
+        last_indexed_at = updated_at if indexed else None
+        with self.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO index_states (
+                    knowledge_base_id, embedding_model, vector_dimension, status,
+                    last_indexed_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(knowledge_base_id) DO UPDATE SET
+                    embedding_model = excluded.embedding_model,
+                    vector_dimension = excluded.vector_dimension,
+                    status = excluded.status,
+                    last_indexed_at = CASE
+                        WHEN excluded.last_indexed_at IS NOT NULL THEN excluded.last_indexed_at
+                        ELSE index_states.last_indexed_at
+                    END,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    knowledge_base_id,
+                    embedding_model,
+                    vector_dimension,
+                    status,
+                    last_indexed_at,
+                    updated_at,
+                ),
+            )
+
+    def reset_knowledge_base_for_rebuild(self, knowledge_base_id: str) -> list[dict]:
+        documents = self.list_documents(knowledge_base_id)
+        updated_at = now()
+        with self.connection() as connection:
+            for document in documents:
+                connection.execute(
+                    """
+                    UPDATE document_versions
+                    SET status = 'queued', error_message = NULL, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (updated_at, document["version_id"]),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO document_tasks (
+                        id, document_version_id, kind, status, attempt, created_at, updated_at
+                    ) VALUES (?, ?, 'parse', 'queued', ?, ?, ?)
+                    """,
+                    (
+                        str(uuid4()),
+                        document["version_id"],
+                        document["retry_count"],
+                        updated_at,
+                        updated_at,
+                    ),
+                )
+        return self.list_documents(knowledge_base_id)
 
     @staticmethod
     def _document_from_row(row: sqlite3.Row) -> dict:

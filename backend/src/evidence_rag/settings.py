@@ -22,12 +22,18 @@ class Settings(BaseSettings):
 
     env: Literal["development", "production", "test"] = "development"
     data_dir: Path = Path("data")
+    max_file_bytes: int = 20 * 1024 * 1024
+    max_knowledge_base_bytes: int = 100 * 1024 * 1024
     qdrant_mode: Literal["local", "server"] = "local"
     qdrant_path: Path = Path("data/qdrant")
     qdrant_url: str | None = None
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None
+
+    @property
+    def database_path(self) -> Path:
+        return self.data_dir / "evidence_rag.db"
 
     @model_validator(mode="after")
     def validate_qdrant_configuration(self) -> "Settings":

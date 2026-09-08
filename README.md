@@ -4,7 +4,18 @@
 
 ## 当前状态
 
-已完成可测试的前后端开发骨架：FastAPI 提供 `GET /api/health`，React/Vite 提供中文工作台占位页面。知识库、上传、检索与问答尚未实现。
+已完成可测试的前后端开发骨架与文档生命周期：FastAPI 提供 `GET /api/health`、知识库管理和文档上传 API；React/Vite 目前仍是中文工作台占位页面。检索、生成问答与可视化界面尚未实现。
+
+上传文件会复制到项目 `data/uploads/`，原始文件不会被修改。当前阶段只校验文件后缀、大小、知识库容量和重复 Hash，并创建 `queued` 解析任务；DOCX/PDF 是否包含可提取文本、内容切分和向量索引将在 Task 4 完成。
+
+## 当前 API
+
+- `POST` / `GET` / `DELETE` `/api/knowledge-bases`
+- `POST` / `GET` / `DELETE` `/api/knowledge-bases/{knowledge_base_id}/documents`
+- `POST` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/retry`
+- `GET` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/tasks`
+
+删除文档或知识库只会删除项目数据目录下的副本，并请求清理同一知识库范围内的向量；真实向量索引将在 Task 4 接入。
 
 ## 本地运行（开发期）
 

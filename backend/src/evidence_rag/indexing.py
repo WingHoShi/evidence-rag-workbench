@@ -284,9 +284,28 @@ class QdrantChunkIndex(VectorIndex):
             with_payload=True,
         )
         return [
-            {**dict(point.payload or {}), "score": point.score}
+            {**dict(point.payload or {}), "point_id": str(point.id), "score": point.score}
             for point in response.points
         ]
+
+    def list_chunks(self, knowledge_base_id: str) -> list[dict]:
+        """仅滚动读取当前知识库的 payload，供 BM25 建立临时倒排基线。"""
+        if not self.client.collection_exists(self.collection_name):
+            return []
+        chunks: list[dict] = []
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                self.collection_name,
+                scroll_filter=self._filter("knowledge_base_id", knowledge_base_id),
+                limit=128,
+                with_payload=True,
+                with_vectors=False,
+                offset=offset,
+            )
+            chunks.extend({**dict(point.payload or {}), "point_id": str(point.id)} for point in points)
+            if offset is None:
+                return chunks
 
     def delete_document_vectors(self, knowledge_base_id: str, version_id: str) -> None:
         if self.client.collection_exists(self.collection_name):

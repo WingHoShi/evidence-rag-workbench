@@ -1,8 +1,13 @@
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
-from pydantic import BaseModel
+import json
 
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from evidence_rag.answering import GroundedAnswerService, OpenAICompatibleChatClient
 from evidence_rag.indexing import DocumentIndexingService, MultilingualE5EmbeddingEngine, QdrantChunkIndex
 from evidence_rag.lifecycle import DocumentLifecycleService, LifecycleError
+from evidence_rag.retrieval import HybridRetriever
 from evidence_rag.settings import Settings
 from evidence_rag.vector_store import VectorIndex
 
@@ -10,6 +15,10 @@ from evidence_rag.vector_store import VectorIndex
 class KnowledgeBaseCreate(BaseModel):
     name: str
 
+
+class ChatQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=4_000)
+    top_k: int = Field(default=5, ge=1, le=5)
 
 def lifecycle_error(error: LifecycleError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail=error.detail)
@@ -19,6 +28,7 @@ def create_app(
     settings: Settings | None = None,
     vector_index: VectorIndex | None = None,
     embedding_engine=None,
+    chat_client=None,
 ) -> FastAPI:
     """创建 API 应用；后续路由以此工厂函数挂载，方便隔离测试配置。"""
     active_settings = settings or Settings()
@@ -30,6 +40,15 @@ def create_app(
         app.state.services,
         active_index,
         embedding_engine or MultilingualE5EmbeddingEngine(active_settings),
+    )
+    app.state.retriever = HybridRetriever(
+        app.state.indexing_service,
+        active_index,
+        min_vector_score=active_settings.retrieval_min_vector_score,
+    )
+    app.state.answer_service = GroundedAnswerService(
+        app.state.retriever,
+        chat_client or OpenAICompatibleChatClient(active_settings),
     )
 
     @app.get("/api/health")
@@ -117,6 +136,23 @@ def create_app(
             return app.state.indexing_service.index_status(knowledge_base_id)
         except LifecycleError as error:
             raise lifecycle_error(error) from error
+
+    @app.post("/api/knowledge-bases/{knowledge_base_id}/chat/stream")
+    async def stream_answer(knowledge_base_id: str, payload: ChatQuestion) -> StreamingResponse:
+        try:
+            app.state.services._require_knowledge_base(knowledge_base_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+
+        async def events():
+            async for event, data in app.state.answer_service.stream_events(
+                knowledge_base_id,
+                payload.question,
+                top_k=payload.top_k,
+            ):
+                yield f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(events(), media_type="text/event-stream")
 
     return app
 

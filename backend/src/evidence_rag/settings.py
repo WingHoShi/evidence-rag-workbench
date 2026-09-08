@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None
+    retrieval_min_vector_score: float = 0.55
 
     @property
     def database_path(self) -> Path:

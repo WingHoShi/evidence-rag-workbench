@@ -4,7 +4,37 @@
 
 ## 当前状态
 
-项目仅完成初始化、Git 基线和需求固化，尚未包含可运行的应用代码。
+已完成可测试的前后端开发骨架：FastAPI 提供 `GET /api/health`，React/Vite 提供中文工作台占位页面。知识库、上传、检索与问答尚未实现。
+
+## 本地运行（开发期）
+
+Python 依赖使用项目虚拟环境；建议通过清华 PyPI 镜像安装：
+
+```powershell
+D:\py\python.exe -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]" --index-url https://pypi.tuna.tsinghua.edu.cn/simple
+Copy-Item .env.example .env
+.\.venv\Scripts\uvicorn.exe evidence_rag.app:app --reload
+```
+
+另开一个终端启动前端（npm 已配置为使用 npmmirror）：
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+前端开发服务器会将 `/api` 请求代理到 `http://127.0.0.1:8000`。目前无需填写 API Key 即可访问健康检查；后续真正调用生成模型前，后端会拒绝未配置 `EVIDENCE_RAG_LLM_API_KEY` 的请求。
+
+## 验证命令
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+Set-Location frontend
+npm test
+npm run build
+```
 
 ## 已确认目标
 

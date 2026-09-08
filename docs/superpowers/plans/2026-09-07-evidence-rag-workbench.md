@@ -28,10 +28,10 @@
 
 ## Task 2：建立可测试的前后端骨架与本地配置
 
-- [ ] 建立 FastAPI 健康检查、pytest、React + TypeScript + Vite 与 `.env.example`。
-- [ ] 使用本地 Qdrant 嵌入模式进行开发，预留 Docker 服务地址。
-- [ ] 测试健康检查、缺失 API Key 和错误配置。
-- [ ] 提交：`feat: 建立前后端开发骨架`。
+- [x] 建立 FastAPI 健康检查、pytest、React + TypeScript + Vite 与 `.env.example`。
+- [x] 使用本地 Qdrant 嵌入模式进行开发，预留 Docker 服务地址。
+- [x] 测试健康检查、缺失 API Key 和错误配置。
+- [x] 提交：`feat: 建立前后端开发骨架`。
 
 ## Task 3：知识库、文档与任务生命周期
 

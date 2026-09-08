@@ -7,6 +7,7 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .coverage
@@ -14,6 +15,7 @@ htmlcov/
 
 # Node / frontend
 node_modules/
+.npm-cache/
 dist/
 coverage/
 

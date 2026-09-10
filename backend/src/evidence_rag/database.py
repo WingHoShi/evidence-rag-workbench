@@ -390,6 +390,130 @@ class Database:
             )
         return result.rowcount == 1
 
+    def save_chat_exchange(
+        self,
+        knowledge_base_id: str,
+        question: str,
+        answer: str,
+        citations: list[dict],
+        session_id: str | None = None,
+    ) -> str:
+        created_at = now()
+        active_session_id = session_id or str(uuid4())
+        with self.connection() as connection:
+            session = connection.execute(
+                """
+                SELECT id FROM chat_sessions
+                WHERE id = ? AND knowledge_base_id = ?
+                """,
+                (active_session_id, knowledge_base_id),
+            ).fetchone()
+            if session is None:
+                connection.execute(
+                    """
+                    INSERT INTO chat_sessions (id, knowledge_base_id, title, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (active_session_id, knowledge_base_id, question[:80], created_at, created_at),
+                )
+            else:
+                connection.execute(
+                    "UPDATE chat_sessions SET updated_at = ? WHERE id = ?",
+                    (created_at, active_session_id),
+                )
+            connection.execute(
+                """
+                INSERT INTO chat_messages (id, session_id, role, content, created_at)
+                VALUES (?, ?, 'user', ?, ?)
+                """,
+                (str(uuid4()), active_session_id, question, created_at),
+            )
+            answer_message_id = str(uuid4())
+            connection.execute(
+                """
+                INSERT INTO chat_messages (id, session_id, role, content, created_at)
+                VALUES (?, ?, 'assistant', ?, ?)
+                """,
+                (answer_message_id, active_session_id, answer, created_at),
+            )
+            for citation in citations:
+                connection.execute(
+                    """
+                    INSERT INTO citation_snapshots (
+                        id, message_id, document_version_id, chunk_id, label, locator,
+                        quoted_text, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid4()),
+                        answer_message_id,
+                        citation.get("document_version_id"),
+                        citation.get("chunk_id"),
+                        citation["label"],
+                        citation.get("locator"),
+                        citation["quoted_text"],
+                        created_at,
+                    ),
+                )
+        return active_session_id
+
+    def list_chat_sessions(self, knowledge_base_id: str) -> list[dict]:
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT s.id, s.title, s.created_at, s.updated_at, COUNT(m.id) AS message_count
+                FROM chat_sessions AS s
+                LEFT JOIN chat_messages AS m ON m.session_id = s.id
+                WHERE s.knowledge_base_id = ?
+                GROUP BY s.id
+                ORDER BY s.updated_at DESC
+                """,
+                (knowledge_base_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_chat_messages(self, knowledge_base_id: str, session_id: str) -> list[dict] | None:
+        with self.connection() as connection:
+            session = connection.execute(
+                "SELECT id FROM chat_sessions WHERE id = ? AND knowledge_base_id = ?",
+                (session_id, knowledge_base_id),
+            ).fetchone()
+            if session is None:
+                return None
+            rows = connection.execute(
+                """
+                SELECT id, role, content, created_at
+                FROM chat_messages
+                WHERE session_id = ?
+                ORDER BY created_at, rowid
+                """,
+                (session_id,),
+            ).fetchall()
+            messages = [dict(row) | {"citations": []} for row in rows]
+            message_by_id = {message["id"]: message for message in messages}
+            citations = connection.execute(
+                """
+                SELECT c.message_id, c.label, c.locator, c.quoted_text, v.original_filename
+                FROM citation_snapshots AS c
+                LEFT JOIN document_versions AS v ON v.id = c.document_version_id
+                WHERE c.message_id IN (
+                    SELECT id FROM chat_messages WHERE session_id = ?
+                )
+                ORDER BY c.rowid
+                """,
+                (session_id,),
+            ).fetchall()
+        for citation in citations:
+            message_by_id[citation["message_id"]]["citations"].append(
+                {
+                    "label": citation["label"],
+                    "original_filename": citation["original_filename"] or "已删除文档",
+                    "locator": citation["locator"],
+                    "quoted_text": citation["quoted_text"],
+                }
+            )
+        return messages
+
     def start_indexing(self, knowledge_base_id: str, document_id: str) -> dict | None:
         document = self.get_document(knowledge_base_id, document_id)
         if document is None:

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-已完成可测试的前后端开发骨架、文档生命周期、向量索引与可信问答后端：FastAPI 提供 `GET /api/health`、知识库管理、文档上传、手动索引与 SSE 问答 API；React/Vite 目前仍是中文工作台占位页面，完整可视化界面尚未实现。
+已完成可测试的前后端开发骨架、文档生命周期、向量索引、可信问答与中文工作台：FastAPI 提供知识库、文档、索引、SSE 问答与本地历史 API；React/Vite 提供知识库选择、上传、手动索引、带引用问答、历史和设置页面。
 
 上传文件会复制到项目 `data/uploads/`，原始文件不会被修改。上传阶段只校验文件后缀、大小、知识库容量和重复 Hash，并创建 `queued` 解析任务；随后由索引入口校验 DOCX/PDF 是否包含可提取文本、完成内容切分与向量写入。
 
@@ -20,12 +20,16 @@
 - `POST` `/api/knowledge-bases/{knowledge_base_id}/rebuild-index`
 - `GET` `/api/knowledge-bases/{knowledge_base_id}/index-status`
 - `POST` `/api/knowledge-bases/{knowledge_base_id}/chat/stream`（请求体：`{"question": "...", "top_k": 1-5}`；响应为 SSE）
+- `GET` `/api/knowledge-bases/{knowledge_base_id}/chat-sessions`
+- `GET` `/api/knowledge-bases/{knowledge_base_id}/chat-sessions/{session_id}/messages`
 
 删除文档或知识库只会删除项目数据目录下的副本，并同步清理同一知识库范围内的 Qdrant 向量。
 
 每个 Qdrant 检索请求都会强制带上 `knowledge_base_id` 过滤条件，避免跨知识库返回资料。索引状态会记录 Embedding 模型名和向量维度；如果更换模型，系统会拒绝混合写入，必须通过“重建索引”入口重新生成该知识库的所有向量。
 
 问答先保留纯向量检索基线，再将向量候选与本地 BM25 候选使用 RRF 融合。生成前会把最多 5 个来源标为 `[S1]` 至 `[S5]`；检索无可靠依据、来源包含疑似提示注入、模型未给出有效引用或引用越界时，接口只会返回中文拒答，不会输出模型原文。为避免流式输出后无法撤回无效回答，后端会先缓冲完整模型输出并校验引用，再通过 SSE 发送 `sources`、`delta`、`done` 事件；模型配置或网络异常发送不含敏感信息的 `error` 事件。
+
+每个成功问答会将用户问题、回答以及实际引用的文档版本、片段定位和原文快照写入 SQLite。本地历史页按知识库隔离读取这些内容；即使后续删除原文档，已保存的引用原文快照仍可用于追溯。设置页只在浏览器本地保存非敏感的 `top_k` 参数，并明确不提供 API Key 输入框。
 
 ## 本地运行（开发期）
 

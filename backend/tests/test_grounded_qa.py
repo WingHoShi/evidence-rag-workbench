@@ -162,7 +162,9 @@ def test_sse_answer_exposes_sources_and_only_valid_citations(qa_app) -> None:
     assert events[0][0] == "sources"
     assert events[0][1]["sources"][0]["label"] == "S1"
     assert ("delta", {"text": "State is saved as checkpoints. [S1]"}) in events
-    assert events[-1] == ("done", {"citation_labels": ["S1"]})
+    assert events[-1][0] == "done"
+    assert events[-1][1]["citation_labels"] == ["S1"]
+    assert events[-1][1]["session_id"]
 
 
 def test_no_evidence_refuses_without_calling_model(qa_app) -> None:
@@ -232,6 +234,41 @@ def test_model_provider_error_is_safe_sse_event(qa_app) -> None:
 
     assert sse_events(response) == [("error", {"message": "模型服务暂时不可用，请检查本地配置后重试。"})]
     assert "test-key-must-not-leak" not in response.text
+
+
+def test_successful_answer_is_saved_with_citation_snapshot(qa_app) -> None:
+    knowledge_base = create_knowledge_base(qa_app)
+    upload_and_index(
+        qa_app,
+        knowledge_base["id"],
+        "state.md",
+        b"# State\nState persistence stores checkpoints.",
+    )
+
+    answer = request(
+        qa_app,
+        "POST",
+        f"/api/knowledge-bases/{knowledge_base['id']}/chat/stream",
+        json={"question": "状态如何保存？"},
+    )
+    done = sse_events(answer)[-1][1]
+    sessions = request(app=qa_app, method="GET", url=f"/api/knowledge-bases/{knowledge_base['id']}/chat-sessions")
+    messages = request(
+        qa_app,
+        "GET",
+        f"/api/knowledge-bases/{knowledge_base['id']}/chat-sessions/{done['session_id']}/messages",
+    )
+
+    assert done["session_id"] == sessions.json()[0]["id"]
+    assert [message["role"] for message in messages.json()] == ["user", "assistant"]
+    assert messages.json()[1]["citations"] == [
+        {
+            "label": "S1",
+            "original_filename": "state.md",
+            "locator": "heading: State",
+            "quoted_text": "State\n\nState persistence stores checkpoints.",
+        }
+    ]
 
 
 def test_chat_rejects_empty_question(qa_app) -> None:

@@ -19,6 +19,7 @@ class KnowledgeBaseCreate(BaseModel):
 class ChatQuestion(BaseModel):
     question: str = Field(min_length=1, max_length=4_000)
     top_k: int = Field(default=5, ge=1, le=5)
+    session_id: str | None = None
 
 def lifecycle_error(error: LifecycleError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail=error.detail)
@@ -145,14 +146,51 @@ def create_app(
             raise lifecycle_error(error) from error
 
         async def events():
+            sources: list[dict] = []
+            answer = ""
             async for event, data in app.state.answer_service.stream_events(
                 knowledge_base_id,
                 payload.question,
                 top_k=payload.top_k,
             ):
+                if event == "sources":
+                    sources = data["sources"]
+                elif event == "delta":
+                    answer += data["text"]
+                elif event == "done":
+                    cited_sources = [
+                        source for source in sources if source["label"] in data["citation_labels"]
+                    ]
+                    session_id = app.state.services.database.save_chat_exchange(
+                        knowledge_base_id,
+                        payload.question,
+                        answer,
+                        cited_sources,
+                        payload.session_id,
+                    )
+                    data = {**data, "session_id": session_id}
                 yield f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream")
+
+    @app.get("/api/knowledge-bases/{knowledge_base_id}/chat-sessions")
+    def list_chat_sessions(knowledge_base_id: str) -> list[dict]:
+        try:
+            app.state.services._require_knowledge_base(knowledge_base_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+        return app.state.services.database.list_chat_sessions(knowledge_base_id)
+
+    @app.get("/api/knowledge-bases/{knowledge_base_id}/chat-sessions/{session_id}/messages")
+    def list_chat_messages(knowledge_base_id: str, session_id: str) -> list[dict]:
+        try:
+            app.state.services._require_knowledge_base(knowledge_base_id)
+        except LifecycleError as error:
+            raise lifecycle_error(error) from error
+        messages = app.state.services.database.list_chat_messages(knowledge_base_id, session_id)
+        if messages is None:
+            raise HTTPException(status_code=404, detail="会话不存在或不属于该知识库")
+        return messages
 
     return app
 

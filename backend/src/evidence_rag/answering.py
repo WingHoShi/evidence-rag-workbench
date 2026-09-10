@@ -123,6 +123,9 @@ class GroundedAnswerService:
                 "heading": source.get("heading"),
                 "locator": source["locator"],
                 "document_id": source["document_id"],
+                "document_version_id": source["document_version_id"],
+                "chunk_id": source["point_id"],
+                "quoted_text": source["text"],
             }
             for index, source in enumerate(evidence, start=1)
         ]

@@ -41,6 +41,14 @@ class FakeEmbeddingEngine:
         return [first_dimension, second_dimension] + [0.0] * (self.dimension - 2)
 
 
+class CloseRecordingClient:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+
 def request(app, method: str, url: str, **kwargs) -> httpx.Response:
     async def send() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
@@ -136,6 +144,17 @@ def test_chunking_preserves_section_heading_and_locator() -> None:
 def test_e5_uses_required_query_and_passage_prefixes() -> None:
     assert MultilingualE5EmbeddingEngine.prefix_passage("hello") == "passage: hello"
     assert MultilingualE5EmbeddingEngine.prefix_query("你好") == "query: 你好"
+
+
+def test_qdrant_chunk_index_closes_the_created_client() -> None:
+    index = QdrantChunkIndex(Settings())
+    client = CloseRecordingClient()
+    index._client = client
+
+    index.close()
+
+    assert client.close_calls == 1
+    assert index._client is None
 
 
 def test_indexes_markdown_and_retrieves_english_evidence_for_chinese_query(indexed_app) -> None:

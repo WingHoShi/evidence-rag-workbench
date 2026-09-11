@@ -240,6 +240,12 @@ class QdrantChunkIndex(VectorIndex):
             self._client = create_qdrant_client(self.settings)
         return self._client
 
+    def close(self) -> None:
+        """释放本地 Qdrant 的文件句柄，便于临时索引目录在 Windows 上清理。"""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
     def upsert_chunks(
         self,
         *,

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     qdrant_mode: Literal["local", "server"] = "local"
     qdrant_path: Path = Path("data/qdrant")
     qdrant_url: str | None = None
+    frontend_dist_dir: Path = Path("frontend/dist")
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None

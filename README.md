@@ -54,6 +54,49 @@ npm run dev
 
 `EVIDENCE_RAG_LLM_BASE_URL`、`EVIDENCE_RAG_LLM_API_KEY` 与 `EVIDENCE_RAG_LLM_MODEL` 只在后端从 `.env` 读取；浏览器、SQLite、日志和 Git 均不会保存密钥。`EVIDENCE_RAG_RETRIEVAL_MIN_VECTOR_SCORE` 控制纯向量候选可独立作为证据的最低余弦相似度，默认 `0.55`；BM25 词项命中仍可参与混合检索。
 
+## Docker Compose（Docker Desktop 就绪后）
+
+本机 Docker Desktop 已迁移到 `F:\DockerDesktop`。由于此 Windows 用户配置目录与 Docker Desktop 存在设置写入兼容性问题，必须先双击运行 `F:\DockerDesktop\Start-Docker-Desktop.cmd`，不要从开始菜单直接启动 Docker Desktop。
+
+### 启动项目
+
+Docker Desktop 的图形界面启动完成后，在项目根目录执行。这里使用 F 盘安装目录中自带的 Compose 程序，避免依赖 C 盘的用户级 Docker 配置：
+
+```powershell
+Set-Location F:\AIproject\evidence-rag-workbench
+& "F:\DockerDesktop\application\resources\bin\docker-compose.exe" start
+```
+
+浏览器访问 `http://127.0.0.1:8000`；API 健康检查为 `http://127.0.0.1:8000/api/health`。首次索引时，API 容器会将 E5 模型下载到 `model_cache` 命名卷，因此第一次索引耗时会更长。
+
+若是首次创建容器，或者修改了 Dockerfile、依赖或 `compose.yaml`，改用以下命令重新构建并后台启动：
+
+```powershell
+Set-Location F:\AIproject\evidence-rag-workbench
+& "F:\DockerDesktop\application\resources\bin\docker-compose.exe" up -d --build
+```
+
+### 停止与关闭
+
+只停止本项目服务、保留数据和容器，执行：
+
+```powershell
+Set-Location F:\AIproject\evidence-rag-workbench
+& "F:\DockerDesktop\application\resources\bin\docker-compose.exe" stop
+```
+
+查看服务状态：
+
+```powershell
+& "F:\DockerDesktop\application\resources\bin\docker-compose.exe" ps
+```
+
+如果还要彻底退出 Docker Desktop，先执行上面的 `stop`，再在 Windows 系统托盘中右键 Docker 图标并选择 **Quit Docker Desktop**。直接关闭 Docker Desktop 窗口通常只是隐藏界面，不会退出 Docker 引擎。
+
+Docker 的程序、WSL 容器磁盘、镜像、构建缓存与命名卷均落在 `F:\DockerDesktop`；`app_data` 保存 SQLite 和上传副本，`qdrant_storage` 保存向量数据。`docker-compose.exe down` 会删除容器和网络，但保留命名卷数据；只有 `docker-compose.exe down -v` 才会删除三个命名卷及其中的本地知识库数据，执行前应先自行备份。
+
+容器基础镜像通过 DaoCloud 的 Docker Hub 镜像加速地址拉取；Dockerfile 固定使用 CPU-only PyTorch，避免下载 CUDA 运行库并意外占用大量磁盘。
+
 ## 验证命令
 
 ```powershell
@@ -75,7 +118,7 @@ npm run build
 
 ## 当前验证边界
 
-后端测试使用确定性的假 Embedding 和假 OpenAI-compatible 流，已经覆盖混合检索、引用校验、拒答、提示注入隔离与 SSE 服务错误。真实 `multilingual-e5-small` 权重尚未在本机下载完整，真实 API 也没有调用，因此真实模型与真实服务的端到端验证留待本地模型和 `.env` 配置就绪后完成。
+后端测试使用确定性的假 Embedding 和假 OpenAI-compatible 流，已经覆盖混合检索、引用校验、拒答、提示注入隔离与 SSE 服务错误。本机已验证真实 `multilingual-e5-small` 和 OpenAI-compatible API：2026-09-11 在 40 条原创受控金标上得到 Recall@5 `1.0`、引用命中率约 `61.76%`、拒答正确性 `65%`、平均检索约 `16.75ms`、平均生成约 `2447.69ms`。原始观测与报告保存在本机忽略目录 `data/evaluation/2026-09-11-generation-merged/`；这是小规模受控语料结果，不代表真实业务或通用模型性能。
 
 ## 明确不在首版范围内
 

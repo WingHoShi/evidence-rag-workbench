@@ -29,7 +29,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-addopts = "-q"
+addopts = "-q --basetemp=backend/.pytest-tmp -o cache_dir=backend/.pytest-cache"
 
 [tool.setuptools]
 package-dir = {"" = "backend/src"}

@@ -2,6 +2,7 @@ import json
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from evidence_rag.answering import GroundedAnswerService, OpenAICompatibleChatClient
@@ -191,6 +192,13 @@ def create_app(
         if messages is None:
             raise HTTPException(status_code=404, detail="会话不存在或不属于该知识库")
         return messages
+
+    if active_settings.frontend_dist_dir.is_dir():
+        app.mount(
+            "/",
+            StaticFiles(directory=str(active_settings.frontend_dist_dir), html=True),
+            name="frontend",
+        )
 
     return app
 

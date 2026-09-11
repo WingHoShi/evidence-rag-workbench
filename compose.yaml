@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      - EVIDENCE_RAG_ENV=production
+      - EVIDENCE_RAG_DATA_DIR=/app/data
+      - EVIDENCE_RAG_EMBEDDING_MODEL_DIR=/app/models/multilingual-e5-small
+      - EVIDENCE_RAG_QDRANT_MODE=server
+      - EVIDENCE_RAG_QDRANT_URL=http://qdrant:6333
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - app_data:/app/data
+      - model_cache:/app/models
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  qdrant:
+    image: m.daocloud.io/docker.io/qdrant/qdrant:latest
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  model_cache:
+  qdrant_storage:

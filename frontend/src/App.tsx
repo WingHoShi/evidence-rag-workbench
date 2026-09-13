@@ -1,4 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkCjkFriendly from 'remark-cjk-friendly/bidi'
 import { api, ChatMessage, ChatSession, Citation, DocumentItem, IndexStatus, KnowledgeBase, streamAnswer } from './api'
 import './styles.css'
 
@@ -73,7 +75,10 @@ function App() {
       await streamAnswer(selectedId, { question: askedQuestion, top_k: topK, session_id: activeSessionId }, (event) => {
         if (event.event === 'sources') sources = event.data.sources
         if (event.event === 'delta') answer += event.data.text
-        if (event.event === 'done') { setActiveSessionId(event.data.session_id); setMessages((current) => [...current, { role: 'user', content: askedQuestion, citations: [] }, { role: 'assistant', content: answer, citations: sources }]); setQuestion(''); setNotice('回答已保存到本地历史。'); void api.listSessions(selectedId).then(setSessions) }
+        if (event.event === 'done') {
+          const citedSources = sources.filter((source) => event.data.citation_labels.includes(source.label))
+          setActiveSessionId(event.data.session_id); setMessages((current) => [...current, { role: 'user', content: askedQuestion, citations: [] }, { role: 'assistant', content: answer, citations: citedSources }]); setQuestion(''); setNotice('回答已保存到本地历史。'); void api.listSessions(selectedId).then(setSessions)
+        }
         if (event.event === 'refusal') setNotice(event.data.reason)
         if (event.event === 'error') setNotice(event.data.message)
       })
@@ -81,7 +86,7 @@ function App() {
   }
   function updateTopK(value: number) { setTopK(value); localStorage.setItem('evidence-rag-top-k', String(value)) }
 
-  const messageView = <div className="messages">{messages.length === 0 && <p className="empty-state">索引完成后，在这里提问。引用会保留原始技术文本。</p>}{messages.map((message, index) => <article className={`message ${message.role}`} key={`${message.id || index}-${message.content}`}><span>{message.role === 'user' ? '你' : '助手'}</span><p>{message.content}</p><CitationList citations={message.citations} /></article>)}</div>
+  const messageView = <div className="messages">{messages.length === 0 && <p className="empty-state">索引完成后，在这里提问。引用会保留原始技术文本。</p>}{messages.map((message, index) => <article className={`message ${message.role}`} key={`${message.id || index}-${message.content}`}><span>{message.role === 'user' ? '你' : '助手'}</span>{message.role === 'assistant' ? <div className="message-content"><ReactMarkdown remarkPlugins={[remarkCjkFriendly]}>{message.content}</ReactMarkdown></div> : <p>{message.content}</p>}<CitationList citations={message.citations} /></article>)}</div>
   return <main className="app-shell">
     <aside className="sidebar"><div className="brand"><span>Evidence RAG</span><strong>可信知识库工作台</strong></div><nav aria-label="主导航"><button className={page === 'workbench' ? 'nav-active' : ''} onClick={() => setPage('workbench')}>工作台</button><button className={page === 'history' ? 'nav-active' : ''} onClick={() => setPage('history')}>历史记录</button><button className={page === 'settings' ? 'nav-active' : ''} onClick={() => setPage('settings')}>设置</button></nav><section className="knowledge-base-list" aria-label="知识库列表"><p className="section-label">知识库</p>{knowledgeBases.map((item) => <button className={item.id === selectedId ? 'knowledge-base-active' : ''} key={item.id} onClick={() => setSelectedId(item.id)}><span>{item.name}</span><small>{item.document_count} 个文档</small></button>)}</section></aside>
     <section className="content"><header className="topbar"><div><p className="eyebrow">本地单用户 · 证据优先</p><h1>可信知识库工作台</h1></div>{notice && <p className="notice" role="status">{notice}</p>}</header>

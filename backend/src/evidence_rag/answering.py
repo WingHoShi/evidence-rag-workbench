@@ -15,6 +15,7 @@ NO_EVIDENCE_REASON = "知识库中没有足够可靠的依据，无法回答该�
 INVALID_CITATION_REASON = "生成结果缺少可核验的有效引用，无法回答该问题。"
 UNTRUSTED_SOURCE_REASON = "检索到的内容包含不可信指令，无法据此回答。"
 PROVIDER_ERROR_MESSAGE = "模型服务暂时不可用，请检查本地配置后重试。"
+UNTRUSTED_CANDIDATE_BUFFER = 3
 
 
 class ModelProviderError(RuntimeError):
@@ -87,12 +88,25 @@ class GroundedAnswerService:
         *,
         top_k: int = 5,
     ) -> AsyncIterator[tuple[str, dict]]:
-        evidence = self.retriever.hybrid_search(knowledge_base_id, question, top_k)
-        if not evidence or not self.retriever.has_reliable_evidence(evidence):
+        candidates = self.retriever.hybrid_search(
+            knowledge_base_id,
+            question,
+            top_k + UNTRUSTED_CANDIDATE_BUFFER,
+        )
+        if not candidates:
             yield "refusal", {"reason": NO_EVIDENCE_REASON}
             return
-        if any(_contains_untrusted_instruction(source["text"]) for source in evidence):
+
+        evidence = [
+            source
+            for source in candidates
+            if not _contains_untrusted_instruction(source["text"])
+        ][:top_k]
+        if not evidence:
             yield "refusal", {"reason": UNTRUSTED_SOURCE_REASON}
+            return
+        if not self.retriever.has_reliable_evidence(evidence):
+            yield "refusal", {"reason": NO_EVIDENCE_REASON}
             return
 
         sources = self._sources(evidence)

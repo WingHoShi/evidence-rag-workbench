@@ -173,6 +173,9 @@ def test_sse_answer_exposes_sources_and_only_valid_citations(qa_app) -> None:
     assert events[-1][0] == "done"
     assert events[-1][1]["citation_labels"] == ["S1"]
     assert events[-1][1]["session_id"]
+    assert events[-1][1]["retrieval_ms"] >= 0
+    assert events[-1][1]["generation_ms"] >= 0
+    assert events[-1][1]["total_ms"] >= events[-1][1]["retrieval_ms"]
 
 
 def test_no_evidence_is_saved_as_an_assistant_message_without_sources(qa_app) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator
+from time import perf_counter
 from typing import Protocol
 
 import httpx
@@ -99,13 +100,15 @@ class GroundedAnswerService:
         *,
         top_k: int = 5,
     ) -> AsyncIterator[tuple[str, dict]]:
+        started_at = perf_counter()
         candidates = self.retriever.hybrid_search(
             knowledge_base_id,
             question,
             top_k + UNTRUSTED_CANDIDATE_BUFFER,
         )
+        retrieval_ms = (perf_counter() - started_at) * 1000
         if not candidates:
-            for event in self._refusal_events(NO_EVIDENCE_REASON):
+            for event in self._refusal_events(NO_EVIDENCE_REASON, retrieval_ms, started_at):
                 yield event
             return
 
@@ -115,44 +118,64 @@ class GroundedAnswerService:
             if not _contains_untrusted_instruction(source["text"])
         ][:top_k]
         if not evidence:
-            for event in self._refusal_events(UNTRUSTED_SOURCE_REASON):
+            for event in self._refusal_events(UNTRUSTED_SOURCE_REASON, retrieval_ms, started_at):
                 yield event
             return
         if not self.retriever.has_reliable_evidence(evidence):
-            for event in self._refusal_events(NO_EVIDENCE_REASON):
+            for event in self._refusal_events(NO_EVIDENCE_REASON, retrieval_ms, started_at):
                 yield event
             return
 
         sources = self._sources(evidence)
         messages = self._messages(question, evidence)
+        generation_started_at = perf_counter()
         try:
             pieces = [piece async for piece in self.chat_client.stream(messages)]
         except ModelProviderError:
             yield "error", {"message": PROVIDER_ERROR_MESSAGE}
             return
+        generation_ms = (perf_counter() - generation_started_at) * 1000
 
         answer = "".join(pieces).strip()
         if _is_explicit_refusal(answer):
-            for event in self._refusal_events(NO_EVIDENCE_REASON):
+            for event in self._refusal_events(NO_EVIDENCE_REASON, retrieval_ms, started_at, generation_ms):
                 yield event
             return
         citation_labels = self._validated_citations(answer, sources)
         if citation_labels is None or _contains_untrusted_instruction(answer):
-            for event in self._refusal_events(INVALID_CITATION_REASON):
+            for event in self._refusal_events(INVALID_CITATION_REASON, retrieval_ms, started_at, generation_ms):
                 yield event
             return
 
         # 先缓冲并校验，再把内容发送给浏览器，避免流式输出后无法撤回无依据结论。
         yield "sources", {"sources": sources}
         yield "delta", {"text": answer}
-        yield "done", {"citation_labels": citation_labels}
+        yield "done", {
+            "citation_labels": citation_labels,
+            "retrieval_ms": retrieval_ms,
+            "generation_ms": generation_ms,
+            "total_ms": (perf_counter() - started_at) * 1000,
+        }
 
     @staticmethod
-    def _refusal_events(reason: str) -> list[tuple[str, dict]]:
+    def _refusal_events(
+        reason: str,
+        retrieval_ms: float,
+        started_at: float,
+        generation_ms: float | None = None,
+    ) -> list[tuple[str, dict]]:
         return [
             ("sources", {"sources": []}),
             ("delta", {"text": reason}),
-            ("done", {"citation_labels": []}),
+            (
+                "done",
+                {
+                    "citation_labels": [],
+                    "retrieval_ms": retrieval_ms,
+                    "generation_ms": generation_ms,
+                    "total_ms": (perf_counter() - started_at) * 1000,
+                },
+            ),
         ]
 
     @staticmethod

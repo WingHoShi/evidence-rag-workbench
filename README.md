@@ -106,6 +106,22 @@ npm test
 npm run build
 ```
 
+### 真实 LangGraph 验收
+
+应用启动且已导入 LangGraph Demo 文档后，可先查看知识库 ID：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/knowledge-bases
+```
+
+再运行固定的 10 条验收题。脚本会调用当前 `.env` 配置的模型，并把问题、回答、引用、检索/生成/总耗时和汇总报告写入 Git 忽略的 `data/evaluation/`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_live_acceptance.py --knowledge-base-id "替换为知识库 ID"
+```
+
+2026-09-13 对本机 41 篇 LangGraph 官方文档的首次真实验收中，8 条可回答题与 2 条应拒答题均符合预期；平均检索耗时约 272ms、平均生成耗时约 10.88s、平均总耗时约 11.15s。该结果只代表这 10 条固定验收题和当时的模型服务状态，不代表通用业务性能。
+
 ## 已确认目标
 
 - React + TypeScript 前端，FastAPI 后端。

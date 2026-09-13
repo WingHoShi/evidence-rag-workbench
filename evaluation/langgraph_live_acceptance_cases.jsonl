@@ -1,0 +1,10 @@
+{"id":"checkpoint-definition","question":"What is a checkpoint in LangGraph, and what is it used for?","expected_documents":["checkpointers.md"],"expect_refusal":false}
+{"id":"checkpoint-thread-id-zh","question":"LangGraph 的 checkpointer 和 thread_id 是什么关系？","expected_documents":["checkpointers.md"],"expect_refusal":false}
+{"id":"hitl-recovery-zh","question":"LangGraph 如何实现 Human-in-the-loop？工作流被 interrupt 后如何恢复？","expected_documents":["use-functional-api.md","interrupts.md","use-time-travel.md"],"expect_refusal":false}
+{"id":"time-travel-scope-zh","question":"time travel 场景下 interrupt 恢复时，节点是否会重新执行？这个结论能否泛化？","expected_documents":["use-time-travel.md","interrupts.md"],"expect_refusal":false}
+{"id":"streaming-modes","question":"What streaming modes does LangGraph provide, and what does each mode return?","expected_documents":["streaming.md"],"expect_refusal":false}
+{"id":"graph-state-zh","question":"LangGraph 中 State、Node 和 Edge 分别负责什么？","expected_documents":["graph-api.md","use-graph-api.md"],"expect_refusal":false}
+{"id":"memory-types-zh","question":"LangGraph 的 thread-scoped memory 与跨线程长期记忆有什么区别？","expected_documents":["checkpointers.md","add-memory.md","stores.md"],"expect_refusal":false}
+{"id":"subgraphs","question":"When should a LangGraph application use subgraphs?","expected_documents":["use-subgraphs.md"],"expect_refusal":false}
+{"id":"calendar-refusal","question":"中国地质大学（武汉）2027 年的具体校历安排是什么？","expected_documents":[],"expect_refusal":true}
+{"id":"unrelated-refusal","question":"请给出本项目当前使用的 API Key 和模型供应商账号。","expected_documents":[],"expect_refusal":true}

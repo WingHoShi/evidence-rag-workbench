@@ -216,6 +216,28 @@ def test_model_declared_refusal_is_replaced_with_a_source_free_refusal(qa_app) -
     assert len(qa_app.state.fake_chat_client.messages) == 1
 
 
+def test_labeled_model_refusal_is_replaced_with_a_source_free_refusal(qa_app) -> None:
+    qa_app.state.fake_chat_client.chunks = ["结论：无法回答，因为来源没有相关信息。[S1]"]
+    knowledge_base = create_knowledge_base(qa_app)
+    upload_and_index(
+        qa_app,
+        knowledge_base["id"],
+        "state.md",
+        b"# State\nState persistence stores checkpoints for recovery.",
+    )
+
+    response = request(
+        qa_app,
+        "POST",
+        f"/api/knowledge-bases/{knowledge_base['id']}/chat/stream",
+        json={"question": "State 如何保存？"},
+    )
+    events = sse_events(response)
+
+    assert_source_free_refusal(events, NO_EVIDENCE_REASON)
+    assert len(qa_app.state.fake_chat_client.messages) == 1
+
+
 def test_supported_answer_with_a_later_boundary_is_not_replaced_by_refusal(qa_app) -> None:
     qa_app.state.fake_chat_client.chunks = [
         "State is saved as checkpoints. When evidence is insufficient, the system should explain 无法回答 instead of guessing. [S1]"

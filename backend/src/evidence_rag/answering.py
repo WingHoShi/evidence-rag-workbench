@@ -85,6 +85,9 @@ def _contains_untrusted_instruction(text: str) -> bool:
 
 def _is_explicit_refusal(text: str) -> bool:
     normalized = text.lstrip()
+    labeled_refusal = re.match(r"(?:结论|回答|说明|结果)\s*[:：]\s*", normalized)
+    if labeled_refusal:
+        normalized = normalized[labeled_refusal.end() :]
     return any(re.match(pattern, normalized) for pattern in EXPLICIT_REFUSAL_PATTERNS)
 
 

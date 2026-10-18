@@ -13,3 +13,34 @@ __pycache__/
 .npm-cache/
 coverage/
 htmlcov/
+
+# Keep local secrets, databases and publishing artifacts out of build context
+.env.*
+**/.env
+**/.env.*
+runtime-config/
+.acceptance-data/
+.acceptance-runtime-config/
+.superpowers/
+MEMORY/
+docs/local/
+.pytest*/
+**/.pytest*/
+**/*.egg-info/
+**/*.tsbuildinfo
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite3-wal
+**/*.sqlite3-shm
+**/*.pem
+**/*.key
+**/*.bak
+**/*.lnk
+demo-video/
+Evidence Studio.cmd
+启动项目.cmd
+scripts/start-project.ps1
+assets/evidence-studio.*

@@ -35,3 +35,29 @@ model_cache/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local-only publishing material and runtime artifacts
+.superpowers/
+MEMORY/
+docs/local/
+runtime-config/
+.acceptance-data/
+.acceptance-runtime-config/
+.pytest*/
+*.tsbuildinfo
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.pem
+*.key
+*.bak
+*.lnk
+demo-video/
+/Evidence Studio.cmd
+/启动项目.cmd
+/scripts/start-project.ps1
+/assets/evidence-studio.*

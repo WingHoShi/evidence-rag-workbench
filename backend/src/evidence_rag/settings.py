@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None
+    model_config_path: Path = Path("runtime-config/model.json")
     retrieval_min_vector_score: float = 0.55
 
     @property

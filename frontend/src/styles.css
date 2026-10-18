@@ -1,4 +1,10 @@
 :root { color: #172033; background: #f4f7fb; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; font-synthesis: none; }
+.model-settings { margin: 22px 0 28px; padding-bottom: 24px; border-bottom: 1px solid #dbe4ef; }
+.model-settings fieldset { display: grid; gap: 16px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.model-settings label { max-width: 100%; }
+.model-settings input { width: 100%; border: 1px solid #cbd7e6; border-radius: 8px; padding: 10px; color: #172033; background: #fff; min-width: 0; }
+.model-settings small { color: #64748b; line-height: 1.6; }
+.model-config-guide { margin-bottom: 18px; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, textarea, select { font: inherit; }

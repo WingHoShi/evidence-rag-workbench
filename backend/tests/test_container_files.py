@@ -26,3 +26,6 @@ def test_compose_uses_persistent_qdrant_and_api_data() -> None:
     assert "EVIDENCE_RAG_QDRANT_URL=http://qdrant:6333" in compose
     assert "qdrant_storage:" in compose
     assert "app_data:" in compose
+    assert "./runtime-config:/app/runtime-config" in compose
+    assert "required: false" in compose
+    assert "EVIDENCE_RAG_MODEL_CONFIG_PATH=/app/runtime-config/model.json" in compose

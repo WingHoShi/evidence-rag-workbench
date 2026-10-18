@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 
 const apiMock = vi.hoisted(() => ({
+  getModelConfig: vi.fn().mockResolvedValue({ configured: false, base_url: '', model: '', source: 'none' }),
   listKnowledgeBases: vi.fn(),
   createKnowledgeBase: vi.fn(),
   listDocuments: vi.fn(),

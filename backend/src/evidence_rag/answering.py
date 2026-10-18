@@ -10,6 +10,7 @@ import httpx
 
 from evidence_rag.retrieval import HybridRetriever
 from evidence_rag.settings import ConfigurationError, Settings
+from evidence_rag.model_config import ModelConfigStore
 
 
 NO_EVIDENCE_REASON = "知识库中没有足够可靠的依据，无法回答该问题。"
@@ -36,12 +37,16 @@ class ChatCompletionClient(Protocol):
 class OpenAICompatibleChatClient:
     """最小 OpenAI-compatible SSE 客户端；密钥只在后端请求头短暂使用。"""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, config_store: ModelConfigStore | None = None,
+                 transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.settings = settings
+        self.config_store = config_store or ModelConfigStore(settings)
+        self.transport = transport
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         try:
-            base_url, api_key, model = self.settings.require_llm_credentials()
+            config = self.config_store.resolve()
+            base_url, api_key, model = config.base_url, config.api_key.get_secret_value(), config.model
         except ConfigurationError as error:
             raise ModelProviderError("模型配置不完整") from error
 
@@ -49,9 +54,9 @@ class OpenAICompatibleChatClient:
         payload = {"model": model, "messages": messages, "stream": True, "temperature": 0}
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=60, transport=self.transport, follow_redirects=False) as client:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
-                    if response.status_code >= 400:
+                    if response.status_code >= 300:
                         raise ModelProviderError("模型服务返回错误")
                     async for line in response.aiter_lines():
                         if not line.startswith("data: "):

@@ -57,7 +57,5 @@ runtime-config/
 *.bak
 *.lnk
 demo-video/
-/Evidence Studio.cmd
 /启动项目.cmd
-/scripts/start-project.ps1
 /assets/evidence-studio.*

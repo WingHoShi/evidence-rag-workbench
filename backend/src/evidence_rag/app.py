@@ -10,6 +10,8 @@ from evidence_rag.indexing import DocumentIndexingService, MultilingualE5Embeddi
 from evidence_rag.lifecycle import DocumentLifecycleService, LifecycleError
 from evidence_rag.retrieval import HybridRetriever
 from evidence_rag.settings import Settings
+from evidence_rag.model_config import ModelConfigStore
+from evidence_rag.model_config_routes import create_model_config_router
 from evidence_rag.vector_store import VectorIndex
 
 
@@ -36,6 +38,8 @@ def create_app(
     active_settings = settings or Settings()
     app = FastAPI(title="Evidence RAG Workbench API", version="0.1.0")
     app.state.settings = active_settings
+    app.state.model_config_store = ModelConfigStore(active_settings)
+    app.include_router(create_model_config_router(app.state.model_config_store))
     active_index = vector_index or QdrantChunkIndex(active_settings)
     app.state.services = DocumentLifecycleService(active_settings, active_index)
     app.state.indexing_service = DocumentIndexingService(
@@ -50,7 +54,7 @@ def create_app(
     )
     app.state.answer_service = GroundedAnswerService(
         app.state.retriever,
-        chat_client or OpenAICompatibleChatClient(active_settings),
+        chat_client or OpenAICompatibleChatClient(active_settings, config_store=app.state.model_config_store),
     )
 
     @app.get("/api/health")

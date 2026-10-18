@@ -13,6 +13,8 @@ export type Citation = { label: string; original_filename: string; locator: stri
 export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string; citations: Citation[] }
 export type ChatSession = { id: string; title: string | null; message_count: number; updated_at: string }
 type ApiError = { detail?: string }
+export type ModelConfigStatus = { configured: boolean; base_url: string; model: string; source: 'file' | 'environment' | 'none' }
+export type ModelConfigInput = { base_url: string; model: string; api_key?: string }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init)
@@ -25,6 +27,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getModelConfig: () => request<ModelConfigStatus>('/api/model-config'),
+  saveModelConfig: (payload: ModelConfigInput) => request<ModelConfigStatus>('/api/model-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+  testModelConfig: (payload: ModelConfigInput) => request<{ ok: boolean }>('/api/model-config/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   listKnowledgeBases: () => request<KnowledgeBase[]>('/api/knowledge-bases'),
   createKnowledgeBase: (name: string) => request<KnowledgeBase>('/api/knowledge-bases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }),
   listDocuments: (knowledgeBaseId: string) => request<DocumentItem[]>(`/api/knowledge-bases/${knowledgeBaseId}/documents`),

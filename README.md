@@ -1,148 +1,139 @@
+<div align="center">
+
 # Evidence RAG Workbench
 
-单用户、本地运行的可信知识库工作台。用户上传自己的资料后，系统通过本地检索与可配置的大模型 API 生成带原文依据的回答；当知识库没有可靠证据时，系统应明确拒答。
+**带原文引用的本地知识库问答工作台**
 
-## 当前状态
+把技术文档、学习笔记和项目资料组织成独立知识库，检索相关内容、生成回答，并保留可展开的原文依据与历史记录。
 
-已完成可测试的前后端开发骨架、文档生命周期、向量索引、可信问答与中文工作台：FastAPI 提供知识库、文档、索引、SSE 问答与本地历史 API；React/Vite 提供知识库选择、上传、手动索引、带引用问答、历史和设置页面。
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-上传文件会复制到项目 `data/uploads/`，原始文件不会被修改。上传阶段只校验文件后缀、大小、知识库容量和重复 Hash，并创建 `queued` 解析任务；随后由索引入口校验 DOCX/PDF 是否包含可提取文本、完成内容切分与向量写入。
+[功能介绍](#功能介绍) · [技术设计](#技术设计) · [快速开始](#快速开始) · [验证与评测](#验证与评测) · [详细文档](#详细文档)
 
-索引入口会解析 Markdown、TXT、DOCX 和可复制文本 PDF，按标题、段落或 PDF 页码保留定位信息，再以本地 `multilingual-e5-small` 生成 384 维向量写入 Qdrant。模型默认使用 CPU、批量大小为 16；首次索引需要从 ModelScope 下载模型到已忽略的 `models/`，此过程不需要生成模型 API Key。扫描件或没有可复制文本的 PDF 会明确标记任务失败，不会伪装成已索引。
+</div>
 
-## 技术栈与设计重点
+## 项目简介
 
-- **前端**：React、TypeScript、Vite；知识库与文档管理、问答及引用原文展开。
-- **后端**：Python 3.12+、FastAPI、Pydantic；文档生命周期、接口校验和 SSE 事件返回。
-- **检索**：multilingual-e5-small、Qdrant、BM25、RRF；兼顾语义与词项匹配，并强制按知识库过滤候选。
-- **存储与交付**：SQLite 保存业务状态和历史引用快照；Docker Compose 组织应用与 Qdrant，持久卷保存数据和模型缓存。
+在个人资料中找答案，常遇到两类问题：关键词检索难以覆盖不同措辞，直接让模型回答又难以确认依据。这个项目把**文档管理、混合检索、引用问答和历史追溯**放进同一个中文 Web 工作台。
 
-问答链路：问题向量化与关键词检索 → RRF 融合候选 → 组装带编号来源的上下文 → 调用生成模型 → 校验引用与拒答条件 → 返回结果并保存历史。RRF 不是神经 Reranker，编号合法也不等于已证明答案中的每个结论都被原文支持。
+用户先选择知识库、上传并索引资料，再围绕材料提问。回答关联具体文档片段，可展开查看原文；材料不足或引用不合规时，系统给出拒答，而不是直接展示未经约束的生成结果。
 
-## 快速体验（Docker Compose）
+适用于个人技术资料查阅、学习笔记整理和 RAG 检索方案实验。应用面向单用户本地部署，支持接入用户自备的 OpenAI-compatible 生成模型服务。
 
-前提：已安装并启动 Docker Engine / Docker Desktop，支持 `docker compose`；能访问依赖、镜像和模型下载源，并准备一个 OpenAI-compatible 模型服务。以下命令在项目根目录执行，不要求固定盘符。
+首版优先兼容 **DeepSeek API**，在网页设置自己的接口地址、模型名和 API Key；项目不提供公共密钥或共享额度。
+
+## 功能介绍
+
+### 多知识库管理
+
+按主题创建知识库并在侧栏切换，例如“框架文档”“课程笔记”“项目资料”。上传、检索和历史查询都限定在当前知识库内，避免不同主题的资料混入回答。
+
+### 多格式文档与批量索引
+
+支持 **Markdown、TXT、DOCX、可复制文本 PDF**，可多选上传、逐份索引或批量开始索引。页面展示文件状态、当前处理文件、批次进度和失败信息；删除文档时同步清理应用副本及对应向量，不修改用户原始文件。
+
+解析保留标题、段落或 PDF 页码等定位信息，让检索结果可以回到具体内容。扫描 PDF 不会伪装成已完成索引，而会提示解析失败。
+
+### 语义与关键词混合检索
+
+本地 multilingual-e5-small 负责中英文语义表示，BM25 补充错误码、接口名等词项匹配，RRF 融合两路候选排名。用户可在设置页调整每次问答使用的来源数量（1–5 条）。
+
+### 带原文引用的问答
+
+模型根据检索片段组织回答，页面支持 Markdown 展示。每条回答的引用可独立展开，查看**文件名、片段定位和原文内容**，便于判断回答依据，而不是只看到一个无法核验的来源标签。
+
+### 证据不足时拒答
+
+生成前检查候选证据，生成后检查有效引用。无可靠依据、引用缺失或越界，以及命中部分不可信材料指令规则时，会返回明确提示。模型配置和网络异常也通过独立错误事件反馈，不将失败输出当作正常答案保存。
+
+### 历史会话与引用快照
+
+问答及实际引用写入本地 SQLite，可按知识库打开历史会话。引用保存文档版本、定位和原文快照；即使原文后来被删除，已保存的引用快照仍可追溯当时的依据。
+
+## 技术设计
+
+- **前端交互**：React + TypeScript + Vite，覆盖知识库切换、批量索引进度、Markdown 回答和引用展开。
+- **应用接口**：Python + FastAPI + Pydantic，负责文档生命周期、请求约束和 SSE 事件返回。
+- **检索与索引**：multilingual-e5-small 生成 384 维向量，Qdrant 保存向量和来源元数据；BM25 与向量结果通过 RRF 融合。
+- **数据持久化**：SQLite 管理知识库、文档任务和会话；引用原文作为快照保存，不依赖原文文件持续存在。
+- **本地交付**：Docker Compose 运行应用与 Qdrant，分别持久化业务数据、向量数据和模型缓存。
+
+三个关键取舍：
+
+1. **先检索再生成**：将候选片段及引用编号放入模型上下文，而不是让模型凭记忆回答。RRF 用于排名融合，当前没有额外的神经 Reranker。
+2. **先校验再展示**：后端缓冲完整生成内容并校验引用，再发送 SSE 事件，避免无效答案已经展示却无法撤回；因此不是逐 Token 即时展示。
+3. **索引与历史分工存储**：Qdrant 服务于检索，SQLite 保存业务状态及引用快照；向量查询强制携带知识库过滤条件。
+
+## 快速开始
+
+### 1. 先安装 Docker Desktop
+
+Windows 用户先从 [Docker 官方下载与安装页](https://docs.docker.com/desktop/setup/install/windows-install/) 选择适合自己电脑的 Docker Desktop，按官方说明完成 WSL 2 / 虚拟化配置。安装后打开 Docker Desktop，等待 Linux 容器引擎就绪。需要 **Docker Compose 2.24+**，项目启动器不会代你安装 Docker 或修改系统设置。
+
+下载本仓库并解压，或使用 Git 克隆。在项目根目录打开 PowerShell，首次构建运行：
 
 ```powershell
-# 仅首次创建；已有 .env 不要覆盖
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+& '.\Evidence Studio.cmd' -Build
 ```
 
-编辑本地 `.env` 中的 `EVIDENCE_RAG_LLM_BASE_URL`、`EVIDENCE_RAG_LLM_MODEL`、`EVIDENCE_RAG_LLM_API_KEY`，使用你有权限调用的模型名，不将真实密钥写入仓库。随后执行：
+首次需要下载依赖、构建应用镜像和拉取 Qdrant，耗时取决于网络。应用数据、向量与模型缓存分别持久化。启动器就绪后自动打开 **<http://127.0.0.1:8000>**；失败会保留提示。
+
+### 2. 日常双击快捷启动
+
+首次构建完成后，双击根目录的 **`Evidence Studio.cmd`** 即可。脚本自动寻找 Docker，不依赖开发者盘符；日常启动不自动重新构建或拉取镜像。更新项目代码后，可再次显式使用 `-Build`。
+
+其他系统或偏好终端的用户可使用标准命令：
 
 ```powershell
 docker compose up -d --build
 docker compose ps
 ```
 
-访问 <http://127.0.0.1:8000>；健康检查为 <http://127.0.0.1:8000/api/health>。健康检查通过不代表模型连接或完整问答已验证。首次索引会下载 E5 模型，耗时和网络、硬件有关。
+非标准 Docker 安装路径、无浏览器模式、数据备份和故障排查见 [运行与配置指南](docs/setup.md)。
 
-最短体验：创建知识库 → 上传一份不含隐私的 Markdown/TXT 文档 → 手动索引至完成 → 提问并展开引用 → 再问一个材料中没有答案的问题，观察是否拒答。样例可使用 [`evaluation/controlled_docs/`](evaluation/controlled_docs/)，其中内容是虚构受控材料，不是产品事实。
+### 3. 网页填写自己的 DeepSeek API
 
-该流程会调用你配置的生成模型，可能产生费用；先阅读下方隐私与验证边界。
+进入左侧 **设置 → 生成模型 · 自备 API**：
 
-## 当前 API
+- 接口地址：`https://api.deepseek.com`。
+- 模型名称：默认示例 `deepseek-flash`，也可填写账号实际有权调用的模型；以 [DeepSeek 官方文档](https://api-docs.deepseek.com/) 为准。
+- API Key：从 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) 获取并填写自己的密钥。
 
-- `POST` / `GET` / `DELETE` `/api/knowledge-bases`
-- `POST` / `GET` / `DELETE` `/api/knowledge-bases/{knowledge_base_id}/documents`
-- `POST` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/retry`
-- `GET` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/tasks`
-- `POST` `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}/index`
-- `POST` `/api/knowledge-bases/{knowledge_base_id}/rebuild-index`
-- `GET` `/api/knowledge-bases/{knowledge_base_id}/index-status`
-- `POST` `/api/knowledge-bases/{knowledge_base_id}/chat/stream`（请求体：`{"question": "...", "top_k": 1-5}`；响应为 SSE）
-- `GET` `/api/knowledge-bases/{knowledge_base_id}/chat-sessions`
-- `GET` `/api/knowledge-bases/{knowledge_base_id}/chat-sessions/{session_id}/messages`
+点击 **保存配置**，下一次问答生效，无需重启。保存不调用模型；**测试连接（可能计费）** 是单独的主动操作，不会自动保存。实际问答也会消耗你自己的 API 额度，网页版订阅或其他 Coding Plan 不保证可用于此接口。
 
-删除文档或知识库只会删除项目数据目录下的副本，并同步清理同一知识库范围内的 Qdrant 向量。
+密钥保存在后端本机 `runtime-config/model.json`，不回显、不写浏览器存储、不打进镜像，Git 已排除此目录。它仍是本机明文文件，不要分享或截图。原有 `.env` 配置继续兼容，网页保存的完整配置优先；更换接口地址需重新输入密钥。
 
-每个 Qdrant 检索请求都会强制带上 `knowledge_base_id` 过滤条件，避免跨知识库返回资料。索引状态会记录 Embedding 模型名和向量维度；如果更换模型，系统会拒绝混合写入，必须通过“重建索引”入口重新生成该知识库的所有向量。
+### 4. 体验完整路径
 
-问答先保留纯向量检索基线，再将向量候选与本地 BM25 候选使用 RRF 融合。生成前会把最多 5 个来源标为 `[S1]` 至 `[S5]`；检索无可靠依据、来源包含疑似提示注入、模型未给出有效引用或引用越界时，接口只会返回中文拒答，不会输出模型原文。为避免流式输出后无法撤回无效回答，后端会先缓冲完整模型输出并校验引用，再通过 SSE 发送 `sources`、`delta`、`done` 事件；模型配置或网络异常发送不含敏感信息的 `error` 事件。
+创建知识库 → 上传资料 → 完成索引 → 提问 → 展开引用 → 从历史记录重新打开回答。
 
-每个成功问答会将用户问题、回答以及实际引用的文档版本、片段定位和原文快照写入 SQLite。本地历史页按知识库隔离读取这些内容；即使后续删除原文档，已保存的引用原文快照仍可用于追溯。设置页只在浏览器本地保存非敏感的 `top_k` 参数，并明确不提供 API Key 输入框。
+可先上传 [原创受控文档](evaluation/controlled_docs/) 中的 Markdown 文件，再针对原文提问；这些材料是虚构测试语料。也可以询问一个材料未涉及的问题，观察拒答表现。
 
-## 本地运行（开发期）
+首次索引会从 ModelScope 下载本地 E5 模型。未配置生成模型也可先管理和索引资料；问答时，问题和选中片段会发送给你配置的模型服务商。
 
-前提：Python 3.12+、Node.js 22 和 npm。以下命令在项目根目录执行，Python 依赖使用项目虚拟环境，通过清华 PyPI 镜像安装：
+开发环境安装、配置项、数据卷与故障排查见 [运行与配置指南](docs/setup.md)。
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]" --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-.\.venv\Scripts\uvicorn.exe evidence_rag.app:app --reload
-```
+## 验证与评测
 
-另开一个终端启动前端（以下安装命令使用 npmmirror）：
+2026-10-18 快捷启动与配置功能回归：**后端 93 项测试、前端 10 项测试通过，前端生产构建通过**；另有 Windows 快捷启动契约测试。覆盖文档生命周期、检索与引用、会话历史、模型配置与脱敏及部分界面交互；模拟测试不替代真实 DeepSeek、干净机器安装或完整容器验收。
 
-```powershell
-Set-Location frontend
-npm ci --registry=https://registry.npmmirror.com
-npm run dev
-```
+仓库提供 40 条原创受控金标及 10 条 LangGraph 文档验收题，可用于比较检索方案、记录引用与拒答结果。历史本机的 10 题验收中，8 条可答题与 2 条应拒答题均符合预期，平均检索约 272 ms、端到端约 11.15 s。**这不是系统整体回答准确率或通用性能保证。**
 
-前端开发服务器会将 `/api` 请求代理到 `http://127.0.0.1:8000`。目前无需填写 API Key 即可访问健康检查；后续真正调用生成模型前，后端会拒绝未配置 `EVIDENCE_RAG_LLM_API_KEY` 的请求。
+数据来源、指标分母、两组历史实验和复现方法见 [评测与验证说明](docs/evaluation.md)。
 
-`EVIDENCE_RAG_LLM_BASE_URL`、`EVIDENCE_RAG_LLM_API_KEY` 与 `EVIDENCE_RAG_LLM_MODEL` 由后端从 `.env` 读取，前端不提供密钥输入框；`.env` 已被 Git 忽略。请勿将密钥写进源码、日志或录屏。`EVIDENCE_RAG_RETRIEVAL_MIN_VECTOR_SCORE` 控制纯向量候选可独立作为证据的最低余弦相似度，默认 `0.55`；BM25 词项命中仍可参与混合检索。
+## 使用边界
 
-## 容器数据与日常维护
+- 文档和 Embedding 索引在本地处理，但问题与选中的材料片段会发送给配置的生成模型服务商；先确认资料允许出网。
+- 引用编号合法不等于逐句结论已被证明。拒答与材料指令过滤是规则约束，不承诺零幻觉或完整事实核验。
+- 当前不提供多用户鉴权、公网部署、OCR、复杂表格解析、URL 导入或神经重排。不要直接将服务暴露到公共网络。
+- 上传副本、历史引用快照、模型配置和运行日志可能包含敏感信息；分享前先检查，密钥和运行数据不随仓库发布。
 
-在项目根目录执行 `docker compose stop` 停止服务，`docker compose start` 恢复已有容器，`docker compose logs --tail 100 api` 查看应用日志。日志可能包含业务信息，分享前先脱敏。
+## 详细文档
 
-`app_data` 保存 SQLite 和上传副本，`qdrant_storage` 保存向量，`model_cache` 保存 Embedding 模型。重建容器不等于清空这些卷；`docker compose down` 删除容器和网络但保留命名卷，追加 `-v` 会删除命名卷数据，不能当作普通重启命令。
-
-仓库中的本机 Windows 启动脚本、快捷方式和演示视频不作为公开运行依赖；已有本地文件保留，迁移时请使用上面的标准 Compose 命令。基础镜像使用 DaoCloud 加速，Dockerfile 使用 CPU-only PyTorch 官方 wheel 源。镜像访问失败时先检查来源与网络，不随意替换为未知镜像。
-
-## 验证命令
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-Set-Location frontend
-npm test
-npm run build
-```
-
-### 真实 LangGraph 验收
-
-应用启动且已导入 LangGraph Demo 文档后，可先查看知识库 ID：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/knowledge-bases
-```
-
-再运行固定的 10 条验收题。脚本会调用当前 `.env` 配置的模型，并把问题、回答、引用、检索/生成/总耗时和汇总报告写入 Git 忽略的 `data/evaluation/`：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_live_acceptance.py --knowledge-base-id "替换为知识库 ID"
-```
-
-2026-09-13 对本机 41 篇 LangGraph 官方文档的首次真实验收中，8 条可回答题与 2 条应拒答题均符合预期；平均检索耗时约 272ms、平均生成耗时约 10.88s、平均总耗时约 11.15s。该结果只代表这 10 条固定验收题和当时的模型服务状态，不代表通用业务性能。
-
-## 已确认目标
-
-- React + TypeScript 前端，FastAPI 后端。
-- SQLite 管理知识库、文档任务、会话与引用快照；Qdrant 管理向量索引。
-- 默认本地使用 `multilingual-e5-small` 进行中英文跨语言 Embedding。
-- 生成回答兼容用户自备的 OpenAI-compatible API；密钥仅放在本地 `.env`。
-- 首版支持 Markdown、TXT、DOCX 与可复制文本 PDF。
-- 以 LangGraph 官方文档的可复现快照作为 Demo 语料；官方文档本体不提交到仓库。
-- 通过人工金标评测集比较纯向量检索与 BM25 + RRF 混合检索。
-
-## 当前验证边界
-
-后端测试使用确定性的假 Embedding 和假 OpenAI-compatible 流，已经覆盖混合检索、引用校验、拒答、提示注入隔离与 SSE 服务错误。本机已验证真实 `multilingual-e5-small` 和 OpenAI-compatible API：2026-09-11 在 40 条原创受控金标上得到 Recall@5 `1.0`、引用命中率约 `61.76%`、拒答正确性 `65%`、平均检索约 `16.75ms`、平均生成约 `2447.69ms`。原始观测与报告保存在本机忽略目录 `data/evaluation/2026-09-11-generation-merged/`；这是小规模受控语料结果，不代表真实业务或通用模型性能。
-
-以上为历史本机记录，原始运行结果不随仓库发布，其他环境需自行复测。代码中名为 `recall_at_5` 的指标实际按预期文档是否命中计算，更接近文档级 Hit@5；引用命中不等于逐句忠实性，拒答正确性统计全部题目的预期是否匹配。40 条受控集与 10 条官方文档验收是不同实验，不能混用分母或推广为整体回答准确率。
-
-## 隐私与使用边界
-
-- 本项目面向单用户本地使用，不提供公网多用户鉴权；不要直接暴露到公共网络。
-- Embedding 在本地运行，但生成请求会将问题和选中的材料片段发送给配置的模型服务商。使用自己的密钥，先确认材料允许出网，演示优先使用虚构资料。
-- `.env`、运行数据库、上传副本、模型缓存、日志和未审查视频不应上传到公开仓库。历史引用快照可能在删除原文后继续存在，分享前也要检查历史记录。
-- 规则校验可减少无依据回答与部分提示注入风险，不承诺完整的事实核验或对所有攻击免疫。
-
-## 明确不在首版范围内
-
-多用户登录、URL 导入、OCR、复杂表格、旧版 `.doc`、Reranker、MCP、Agent 编排、百炼 Embedding、公网部署。
-
-详细产品规格位于 [`docs/product-spec.md`](docs/product-spec.md)，实施计划位于 [`docs/superpowers/plans/2026-09-07-evidence-rag-workbench.md`](docs/superpowers/plans/2026-09-07-evidence-rag-workbench.md)。
+- [运行与配置指南](docs/setup.md)：开发安装、容器维护、持久化与常见问题。
+- [API 与事件说明](docs/api.md)：接口分组、请求示例与 SSE 协议。
+- [评测与验证说明](docs/evaluation.md)：测试覆盖、历史观测、指标解释与复现。
+- [评测材料](evaluation/README.md)：原创语料、金标题及官方文档来源清单。

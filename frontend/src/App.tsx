@@ -7,7 +7,7 @@ import ModelSettings from './ModelSettings'
 
 type Page = 'workbench' | 'history' | 'settings'
 type IndexProgress = { completed: number; total: number; currentFilename?: string; failures: number; active: boolean }
-const statusText: Record<string, string> = { queued: '等待索引', running: '正在索引', completed: '已就绪', failed: '索引失败', not_indexed: '尚未索引' }
+const statusText: Record<string, string> = { queued: '等待索引', running: '正在索引', ready: '已就绪', completed: '已就绪', failed: '索引失败', not_indexed: '尚未索引' }
 
 function CitationList({ citations }: { citations: Citation[] }) {
   if (!citations.length) return null

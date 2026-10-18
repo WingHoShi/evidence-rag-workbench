@@ -19,6 +19,7 @@ vi.mock('./api', () => ({ api: apiMock, streamAnswer: streamAnswerMock }))
 
 import App from './App'
 import type { DocumentItem } from './api'
+import { readFileSync } from 'node:fs'
 
 function configureKnowledgeBase(documents: DocumentItem[] = []) {
   apiMock.listKnowledgeBases.mockResolvedValue([{ id: 'kb-1', name: '验收知识库', document_count: 1 }])
@@ -36,6 +37,36 @@ async function askQuestion() {
 
 describe('App', () => {
   afterEach(() => vi.clearAllMocks())
+
+  it('shows the ready index status in Chinese', async () => {
+    configureKnowledgeBase()
+    apiMock.indexStatus.mockResolvedValue({ status: 'ready', embedding_model: 'fake-e5', last_indexed_at: null })
+    render(<App />)
+
+    expect(await screen.findByText('已就绪')).toBeInTheDocument()
+    expect(screen.queryByText('ready')).not.toBeInTheDocument()
+  })
+
+  it('keeps history titles readable before and after selecting a session', async () => {
+    configureKnowledgeBase()
+    apiMock.listSessions.mockResolvedValue([{ id: 'session-1', title: '状态如何保存？', message_count: 2 }])
+    apiMock.listMessages.mockResolvedValue([])
+    const style = document.createElement('style')
+    style.textContent = readFileSync('src/styles.css', 'utf8')
+    document.head.append(style)
+    try {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '历史记录' }))
+      const session = await screen.findByRole('button', { name: /状态如何保存/ })
+      expect(getComputedStyle(session).color).toBe('rgb(23, 32, 51)')
+      fireEvent.click(session)
+      await waitFor(() => expect(session).toHaveClass('session-active'))
+      expect(getComputedStyle(session).color).toBe('rgb(23, 32, 51)')
+      expect(getComputedStyle(session).backgroundColor).toBe('rgb(237, 245, 255)')
+    } finally {
+      style.remove()
+    }
+  })
 
   it('renders the Chinese workbench navigation and document workflow', async () => {
     configureKnowledgeBase()

@@ -19,6 +19,17 @@ Assert-Throws { Assert-ComposeVersion 'Docker Compose version v2.20.0' } '2.24'
 Assert-ComposeVersion 'Docker Compose version v2.24.0-desktop.1'
 $script:Docker = $env:ComSpec
 Assert-Throws { Invoke-DockerCommand -CommandArgs @('/d', '/c', 'exit', '17') } 'Docker command failed'
+$progress = @(Invoke-DockerCommand -CommandArgs @('/d', '/c', 'echo docker-progress 1>&2'))
+Assert-True ($progress.Count -eq 1 -and $progress[0] -is [string] -and $progress[0].Trim() -eq 'docker-progress') 'Successful Docker stderr is plain progress text, not ErrorRecord'
+$mixed = @(Invoke-DockerCommand -CommandArgs @('/d', '/c', 'echo standard-output & echo progress-output 1>&2'))
+Assert-True ($mixed.Count -eq 2 -and ($mixed | Where-Object { $_ -isnot [string] }).Count -eq 0) 'Mixed native streams remain plain text'
+$script:StandaloneCompose = $env:ComSpec
+$progress = @(Invoke-StandaloneCompose -ComposeArgs @('/d', '/c', 'echo compose-progress 1>&2'))
+Assert-True ($progress.Count -eq 1 -and $progress[0] -is [string] -and $progress[0].Trim() -eq 'compose-progress') 'Successful Compose stderr is plain progress text, not ErrorRecord'
+$failureMessage = ''
+try { Invoke-StandaloneCompose -ComposeArgs @('/d', '/c', 'echo genuine-failure 1>&2 & exit /b 19') }
+catch { $failureMessage = $_.Exception.Message }
+Assert-True ($failureMessage -match 'exit 19' -and $failureMessage -match 'genuine-failure') 'Real Compose failures retain exit code and diagnostic text'
 $spaceRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('evidence startup ' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $spaceRoot
 $fakePath = Join-Path $spaceRoot 'docker.exe'

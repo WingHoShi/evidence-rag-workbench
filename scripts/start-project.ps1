@@ -24,10 +24,12 @@ function Resolve-DockerPath {
 
 function Invoke-DockerCommand {
     param([string[]]$CommandArgs)
-    # Native stderr from a stopped engine is not a PowerShell terminating error.
+    # PowerShell 5.1 wraps native stderr as ErrorRecord even on exit 0.
+    # Convert it before Out-Host can render progress as a false error.
     $ErrorActionPreference = 'Continue'
-    $result = & $script:Docker @CommandArgs 2>&1
-    if ($LASTEXITCODE -ne 0) { throw 'Docker command failed. Check Docker Desktop and its engine status.' }
+    $result = & $script:Docker @CommandArgs 2>&1 | ForEach-Object { $_.ToString() }
+    $nativeExit = $LASTEXITCODE
+    if ($nativeExit -ne 0) { throw "Docker command failed (exit $nativeExit).`n$($result -join [Environment]::NewLine)" }
     return $result
 }
 
@@ -48,8 +50,9 @@ function Resolve-ComposePath {
 function Invoke-StandaloneCompose {
     param([string[]]$ComposeArgs)
     $ErrorActionPreference = 'Continue'
-    $result = & $script:StandaloneCompose @ComposeArgs 2>&1
-    if ($LASTEXITCODE -ne 0) { throw 'Docker Compose command failed.' }
+    $result = & $script:StandaloneCompose @ComposeArgs 2>&1 | ForEach-Object { $_.ToString() }
+    $nativeExit = $LASTEXITCODE
+    if ($nativeExit -ne 0) { throw "Docker Compose command failed (exit $nativeExit).`n$($result -join [Environment]::NewLine)" }
     return $result
 }
 
@@ -95,7 +98,7 @@ function Invoke-ProjectStart {
     try {
         Write-Host '[1/3] Checking Docker Desktop and Compose...'
         try { $null = Invoke-DockerCommand -CommandArgs @('info', '--format', '{{.ServerVersion}}') }
-        catch { throw 'Docker Desktop is not ready. Open it, wait for the Linux engine, then retry.' }
+        catch { throw 'Docker Desktop is not ready. Open Docker Desktop manually, wait until the Linux engine is running, then click this shortcut again. No containers were started by this attempt.' }
         $script:StandaloneCompose = $null
         try { $versionText = (Invoke-DockerCommand -CommandArgs @('compose', 'version')) -join ' ' }
         catch {
@@ -119,7 +122,7 @@ function Invoke-ProjectStart {
             $commandArgs += '--build'
         } else { $commandArgs += @('--no-build', '--pull', 'never') }
         try { Invoke-ComposeCommand -ComposeArgs $commandArgs | Out-Host }
-        catch { throw 'Startup failed. First run or after updating code, use: .\Evidence Studio.cmd -Build . See README for logs and setup.' }
+        catch { throw "Startup failed. $($_.Exception.Message)`nFor the first build or after updating code, use: .\Evidence Studio.cmd -Build . See README for logs and setup." }
         Write-Host '[3/3] Waiting for API, database and frontend...'
         Wait-AppReady
         Write-Host "Ready: $script:AppUrl" -ForegroundColor Green
